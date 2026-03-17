@@ -12,3 +12,5 @@ require (
 	google.golang.org/grpc v1.70.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )
+
+replace github.com/axiom-studio/skills.sdk => ../../skills.sdk

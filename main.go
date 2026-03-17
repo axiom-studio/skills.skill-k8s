@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/axiom-studio/skills.sdk/executor"
 	"github.com/axiom-studio/skills.sdk/grpc"
+	"github.com/axiom-studio/skills.sdk/k8sclient"
 	"github.com/axiom-studio/skills.sdk/resolver"
 )
 
@@ -14,11 +16,16 @@ const (
 	iconKubernetes = "kubernetes"
 )
 
+var k8sClient *k8sclient.Client
+
 func main() {
 	port := os.Getenv("SKILL_PORT")
 	if port == "" {
 		port = "50051"
 	}
+
+	// Initialize K8s client (uses ATLAS_URL env var)
+	k8sClient = k8sclient.NewClient("")
 
 	server := grpc.NewSkillServer("skill-k8s", "1.0.0")
 
@@ -472,14 +479,59 @@ func ptr(v float64) *float64 {
 }
 
 // ============================================================================
-// EXECUTORS (placeholder implementations)
+// EXECUTORS
 // ============================================================================
+
+// Helper to get cluster ID from config (defaults to 1)
+func getClusterId(config map[string]interface{}) int {
+	if v, ok := config["cluster"]; ok {
+		switch c := v.(type) {
+		case string:
+			if c == "" || c == "default" {
+				return 1
+			}
+			if id, err := strconv.Atoi(c); err == nil {
+				return id
+			}
+		case float64:
+			return int(c)
+		case int:
+			return c
+		}
+	}
+	return 1
+}
+
+// Helper to get string from config
+func getString(config map[string]interface{}, key string) string {
+	if v, ok := config[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// Helper to get int from config
+func getInt(config map[string]interface{}, key string, def int) int {
+	if v, ok := config[key]; ok {
+		switch n := v.(type) {
+		case float64:
+			return int(n)
+		case int:
+			return n
+		}
+	}
+	return def
+}
 
 type K8sWatchExecutor struct{}
 
 func (e *K8sWatchExecutor) Type() string { return "k8s-watch" }
 
 func (e *K8sWatchExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	// k8s-watch is a trigger - it's handled by Sentinel's trigger manager
+	// When executed, it means the trigger fired and we're returning the event data
 	return &executor.StepResult{
 		Output: map[string]interface{}{
 			"message": "k8s-watch trigger fired",
@@ -493,6 +545,7 @@ type K8sEventExecutor struct{}
 func (e *K8sEventExecutor) Type() string { return "k8s-event" }
 
 func (e *K8sEventExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	// k8s-event is a trigger - handled by Sentinel's trigger manager
 	return &executor.StepResult{
 		Output: map[string]interface{}{
 			"message": "k8s-event trigger fired",
@@ -506,6 +559,7 @@ type K8sLogMonitorExecutor struct{}
 func (e *K8sLogMonitorExecutor) Type() string { return "k8s-log-monitor" }
 
 func (e *K8sLogMonitorExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	// k8s-log-monitor is a trigger - handled by Sentinel's trigger manager
 	return &executor.StepResult{
 		Output: map[string]interface{}{
 			"message": "k8s-log-monitor trigger fired",
@@ -520,10 +574,28 @@ type K8sGetExecutor struct{}
 func (e *K8sGetExecutor) Type() string { return "k8s-get" }
 
 func (e *K8sGetExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	clusterId := getClusterId(step.Config)
+	namespace := getString(step.Config, "namespace")
+	name := getString(step.Config, "name")
+	resourceType := getString(step.Config, "resourceType")
+
+	if resourceType == "" {
+		return nil, fmt.Errorf("resourceType is required")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	resource, err := k8sClient.GetResource(ctx, clusterId, namespace, name, resourceType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource: %w", err)
+	}
+
 	return &executor.StepResult{
 		Output: map[string]interface{}{
-			"message": "k8s-get executed",
-			"config":  step.Config,
+			"resource": resource,
+			"name":     name,
+			"kind":     resourceType,
 		},
 	}, nil
 }
@@ -533,10 +605,24 @@ type K8sListExecutor struct{}
 func (e *K8sListExecutor) Type() string { return "k8s-list" }
 
 func (e *K8sListExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	clusterId := getClusterId(step.Config)
+	namespace := getString(step.Config, "namespace")
+	resourceType := getString(step.Config, "resourceType")
+
+	if resourceType == "" {
+		return nil, fmt.Errorf("resourceType is required")
+	}
+
+	resources, err := k8sClient.ListResources(ctx, clusterId, namespace, resourceType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list resources: %w", err)
+	}
+
 	return &executor.StepResult{
 		Output: map[string]interface{}{
-			"message": "k8s-list executed",
-			"config":  step.Config,
+			"items":    resources,
+			"count":    len(resources),
+			"kind":     resourceType,
 		},
 	}, nil
 }
@@ -546,10 +632,29 @@ type K8sLogsExecutor struct{}
 func (e *K8sLogsExecutor) Type() string { return "k8s-logs" }
 
 func (e *K8sLogsExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	clusterId := getClusterId(step.Config)
+	namespace := getString(step.Config, "namespace")
+	pod := getString(step.Config, "pod")
+	container := getString(step.Config, "container")
+	tailLines := getInt(step.Config, "tailLines", 100)
+
+	if namespace == "" {
+		return nil, fmt.Errorf("namespace is required")
+	}
+	if pod == "" {
+		return nil, fmt.Errorf("pod is required")
+	}
+
+	logs, err := k8sClient.GetPodLogs(ctx, clusterId, namespace, pod, container, tailLines)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get logs: %w", err)
+	}
+
 	return &executor.StepResult{
 		Output: map[string]interface{}{
-			"message": "k8s-logs executed",
-			"config":  step.Config,
+			"logs":     logs,
+			"pod":      pod,
+			"container": container,
 		},
 	}, nil
 }
@@ -559,10 +664,20 @@ type K8sEventsExecutor struct{}
 func (e *K8sEventsExecutor) Type() string { return "k8s-events" }
 
 func (e *K8sEventsExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	clusterId := getClusterId(step.Config)
+	namespace := getString(step.Config, "namespace")
+	resourceType := getString(step.Config, "resourceType")
+	resourceName := getString(step.Config, "resourceName")
+
+	events, err := k8sClient.ListEvents(ctx, clusterId, namespace, resourceType, resourceName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list events: %w", err)
+	}
+
 	return &executor.StepResult{
 		Output: map[string]interface{}{
-			"message": "k8s-events executed",
-			"config":  step.Config,
+			"events": events,
+			"count":  len(events),
 		},
 	}, nil
 }
@@ -572,10 +687,31 @@ type K8sRestartExecutor struct{}
 func (e *K8sRestartExecutor) Type() string { return "k8s-restart" }
 
 func (e *K8sRestartExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	clusterId := getClusterId(step.Config)
+	namespace := getString(step.Config, "namespace")
+	name := getString(step.Config, "name")
+	resourceType := getString(step.Config, "resourceType")
+
+	if namespace == "" {
+		return nil, fmt.Errorf("namespace is required")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if resourceType == "" {
+		return nil, fmt.Errorf("resourceType is required")
+	}
+
+	err := k8sClient.RestartResource(ctx, clusterId, namespace, name, resourceType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restart resource: %w", err)
+	}
+
 	return &executor.StepResult{
 		Output: map[string]interface{}{
-			"message": "k8s-restart executed",
-			"config":  step.Config,
+			"message":  "resource restarted successfully",
+			"name":     name,
+			"kind":     resourceType,
 		},
 	}, nil
 }
@@ -585,10 +721,33 @@ type K8sScaleExecutor struct{}
 func (e *K8sScaleExecutor) Type() string { return "k8s-scale" }
 
 func (e *K8sScaleExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	clusterId := getClusterId(step.Config)
+	namespace := getString(step.Config, "namespace")
+	name := getString(step.Config, "name")
+	resourceType := getString(step.Config, "resourceType")
+	replicas := getInt(step.Config, "replicas", 1)
+
+	if namespace == "" {
+		return nil, fmt.Errorf("namespace is required")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if resourceType == "" {
+		return nil, fmt.Errorf("resourceType is required")
+	}
+
+	err := k8sClient.ScaleResource(ctx, clusterId, namespace, name, resourceType, replicas)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scale resource: %w", err)
+	}
+
 	return &executor.StepResult{
 		Output: map[string]interface{}{
-			"message": "k8s-scale executed",
-			"config":  step.Config,
+			"message":  "resource scaled successfully",
+			"name":     name,
+			"kind":     resourceType,
+			"replicas": replicas,
 		},
 	}, nil
 }
@@ -598,10 +757,35 @@ type K8sPatchExecutor struct{}
 func (e *K8sPatchExecutor) Type() string { return "k8s-patch" }
 
 func (e *K8sPatchExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	clusterId := getClusterId(step.Config)
+	namespace := getString(step.Config, "namespace")
+	name := getString(step.Config, "name")
+	resourceType := getString(step.Config, "resourceType")
+
+	if resourceType == "" {
+		return nil, fmt.Errorf("resourceType is required")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	// Get patch from config
+	patch, ok := step.Config["patch"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("patch is required and must be an object")
+	}
+
+	resource, err := k8sClient.UpdateResource(ctx, clusterId, namespace, name, resourceType, patch)
+	if err != nil {
+		return nil, fmt.Errorf("failed to patch resource: %w", err)
+	}
+
 	return &executor.StepResult{
 		Output: map[string]interface{}{
-			"message": "k8s-patch executed",
-			"config":  step.Config,
+			"message":  "resource patched successfully",
+			"resource": resource,
+			"name":     name,
+			"kind":     resourceType,
 		},
 	}, nil
 }
@@ -611,10 +795,28 @@ type K8sDeleteExecutor struct{}
 func (e *K8sDeleteExecutor) Type() string { return "k8s-delete" }
 
 func (e *K8sDeleteExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	clusterId := getClusterId(step.Config)
+	namespace := getString(step.Config, "namespace")
+	name := getString(step.Config, "name")
+	resourceType := getString(step.Config, "resourceType")
+
+	if resourceType == "" {
+		return nil, fmt.Errorf("resourceType is required")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	err := k8sClient.DeleteResource(ctx, clusterId, namespace, name, resourceType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete resource: %w", err)
+	}
+
 	return &executor.StepResult{
 		Output: map[string]interface{}{
-			"message": "k8s-delete executed",
-			"config":  step.Config,
+			"message": "resource deleted successfully",
+			"name":    name,
+			"kind":    resourceType,
 		},
 	}, nil
 }
