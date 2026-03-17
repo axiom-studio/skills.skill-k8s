@@ -21,14 +21,14 @@ func main() {
 	server := grpc.NewSkillServer("skill-k8s", "1.0.0")
 
 	// Register K8s executors
-	server.RegisterExecutor("k8s-get", &K8sGetExecutor{}, mustMarshal(K8sGetSchema))
-	server.RegisterExecutor("k8s-list", &K8sListExecutor{}, mustMarshal(K8sListSchema))
-	server.RegisterExecutor("k8s-logs", &K8sLogsExecutor{}, mustMarshal(K8sLogsSchema))
-	server.RegisterExecutor("k8s-events", &K8sEventsExecutor{}, mustMarshal(K8sEventsSchema))
-	server.RegisterExecutor("k8s-restart", &K8sRestartExecutor{}, mustMarshal(K8sRestartSchema))
-	server.RegisterExecutor("k8s-scale", &K8sScaleExecutor{}, mustMarshal(K8sScaleSchema))
-	server.RegisterExecutor("k8s-patch", &K8sPatchExecutor{}, mustMarshal(K8sPatchSchema))
-	server.RegisterExecutor("k8s-delete", &K8sDeleteExecutor{}, mustMarshal(K8sDeleteSchema))
+	server.RegisterExecutor("k8s-get", &K8sGetExecutor{})
+	server.RegisterExecutor("k8s-list", &K8sListExecutor{})
+	server.RegisterExecutor("k8s-logs", &K8sLogsExecutor{})
+	server.RegisterExecutor("k8s-events", &K8sEventsExecutor{})
+	server.RegisterExecutor("k8s-restart", &K8sRestartExecutor{})
+	server.RegisterExecutor("k8s-scale", &K8sScaleExecutor{})
+	server.RegisterExecutor("k8s-patch", &K8sPatchExecutor{})
+	server.RegisterExecutor("k8s-delete", &K8sDeleteExecutor{})
 
 	fmt.Printf("Starting skill-k8s gRPC server on port %s\n", port)
 	if err := server.Serve(port); err != nil {
