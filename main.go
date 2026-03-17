@@ -8,6 +8,7 @@ import (
 
 	"github.com/axiom-studio/skills.sdk/executor"
 	"github.com/axiom-studio/skills.sdk/grpc"
+	"github.com/axiom-studio/skills.sdk/resolver"
 )
 
 func main() {
@@ -20,20 +21,40 @@ func main() {
 	// Create skill server
 	server := grpc.NewSkillServer("skill-k8s", "1.0.0")
 
-	// Register K8s executors
-	server.RegisterExecutor("k8s-get", &K8sGetExecutor{})
-	server.RegisterExecutor("k8s-list", &K8sListExecutor{})
-	server.RegisterExecutor("k8s-logs", &K8sLogsExecutor{})
-	server.RegisterExecutor("k8s-events", &K8sEventsExecutor{})
-	server.RegisterExecutor("k8s-restart", &K8sRestartExecutor{})
-	server.RegisterExecutor("k8s-scale", &K8sScaleExecutor{})
-	server.RegisterExecutor("k8s-patch", &K8sPatchExecutor{})
-	server.RegisterExecutor("k8s-delete", &K8sDeleteExecutor{})
+	// Register K8s executors with schemas
+	server.RegisterExecutorWithSchema("k8s-get", &K8sGetExecutor{}, makeNodeSchema("k8s-get", "Get a Kubernetes resource", K8sGetSchema))
+	server.RegisterExecutorWithSchema("k8s-list", &K8sListExecutor{}, makeNodeSchema("k8s-list", "List Kubernetes resources", K8sListSchema))
+	server.RegisterExecutorWithSchema("k8s-logs", &K8sLogsExecutor{}, makeNodeSchema("k8s-logs", "Get logs from a pod", K8sLogsSchema))
+	server.RegisterExecutorWithSchema("k8s-events", &K8sEventsExecutor{}, makeNodeSchema("k8s-events", "Get events for a resource", K8sEventsSchema))
+	server.RegisterExecutorWithSchema("k8s-restart", &K8sRestartExecutor{}, makeNodeSchema("k8s-restart", "Restart a deployment", K8sRestartSchema))
+	server.RegisterExecutorWithSchema("k8s-scale", &K8sScaleExecutor{}, makeNodeSchema("k8s-scale", "Scale a deployment", K8sScaleSchema))
+	server.RegisterExecutorWithSchema("k8s-patch", &K8sPatchExecutor{}, makeNodeSchema("k8s-patch", "Patch a resource", K8sPatchSchema))
+	server.RegisterExecutorWithSchema("k8s-delete", &K8sDeleteExecutor{}, makeNodeSchema("k8s-delete", "Delete a resource", K8sDeleteSchema))
 
 	fmt.Printf("Starting skill-k8s gRPC server on port %s\n", port)
 	if err := server.Serve(port); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to serve: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func makeNodeSchema(name, description string, inputSchema map[string]interface{}) *resolver.NodeSchema {
+	return &resolver.NodeSchema{
+		Name:        name,
+		DisplayName: name,
+		Category:    "action",
+		Description: description,
+		Sections: []*resolver.ConfigSection{
+			{
+				Title: "Configuration",
+				Fields: []*resolver.FieldSchema{
+					{Key: "cluster", Type: resolver.FieldTypeText, Label: "Cluster"},
+					{Key: "namespace", Type: resolver.FieldTypeText, Label: "Namespace"},
+					{Key: "kind", Type: resolver.FieldTypeText, Label: "Kind"},
+					{Key: "name", Type: resolver.FieldTypeText, Label: "Name"},
+				},
+			},
+		},
 	}
 }
 
