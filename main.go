@@ -12,11 +12,6 @@ import (
 
 const (
 	iconKubernetes = "kubernetes"
-	iconLog        = "log"
-	iconScale      = "scale"
-	iconDelete     = "delete"
-	iconPatch      = "patch"
-	iconWatch      = "eye"
 )
 
 func main() {
@@ -89,7 +84,7 @@ func makeK8sWatchSchema() *resolver.NodeSchema {
 		DisplayName: "Watch Resources",
 		Category:    "trigger",
 		Description: "Trigger workflow when Kubernetes resources change",
-		Icon:        iconWatch,
+		Icon: iconKubernetes,
 		Sections: []*resolver.ConfigSection{
 			{
 				Title: "Target",
@@ -151,7 +146,7 @@ func makeK8sLogMonitorSchema() *resolver.NodeSchema {
 		DisplayName: "Log Monitor",
 		Category:    "trigger",
 		Description: "Periodically monitor logs and trigger when patterns match",
-		Icon:        iconLog,
+		Icon: iconKubernetes,
 		Sections: []*resolver.ConfigSection{
 			{
 				Title: "Target",
@@ -279,7 +274,7 @@ func makeK8sLogsSchema() *resolver.NodeSchema {
 		DisplayName: "Get Logs",
 		Category:    "action",
 		Description: "Get logs from a pod or container",
-		Icon:        iconLog,
+		Icon: iconKubernetes,
 		Sections: []*resolver.ConfigSection{
 			{
 				Title: "Target",
@@ -378,7 +373,7 @@ func makeK8sScaleSchema() *resolver.NodeSchema {
 		DisplayName: "Scale Workload",
 		Category:    "action",
 		Description: "Scale a deployment or statefulset to desired replicas",
-		Icon:        iconScale,
+		Icon: iconKubernetes,
 		Sections: []*resolver.ConfigSection{
 			{
 				Title: "Target",
@@ -416,7 +411,7 @@ func makeK8sPatchSchema() *resolver.NodeSchema {
 		DisplayName: "Patch Resource",
 		Category:    "action",
 		Description: "Apply a patch to a Kubernetes resource",
-		Icon:        iconPatch,
+		Icon: iconKubernetes,
 		Sections: []*resolver.ConfigSection{
 			{
 				Title: "Target",
@@ -448,7 +443,7 @@ func makeK8sDeleteSchema() *resolver.NodeSchema {
 		DisplayName: "Delete Resource",
 		Category:    "action",
 		Description: "Delete a Kubernetes resource",
-		Icon:        iconDelete,
+		Icon: iconKubernetes,
 		Sections: []*resolver.ConfigSection{
 			{
 				Title: "Target",
