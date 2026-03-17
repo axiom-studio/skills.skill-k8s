@@ -27,7 +27,7 @@ spec:
     - k8s-patch
     - k8s-delete
   grpc:
-    port: 50051
+    port: 50053
     binary:
       linux-amd64: skill-k8s-linux-amd64
       linux-arm64: skill-k8s-linux-arm64
