@@ -24,6 +24,7 @@ func main() {
 	// Register K8s trigger nodes
 	server.RegisterExecutorWithSchema("k8s-watch", &K8sWatchExecutor{}, makeTriggerSchema("k8s-watch", "Watch Kubernetes resources", K8sWatchSchema))
 	server.RegisterExecutorWithSchema("k8s-event", &K8sEventExecutor{}, makeTriggerSchema("k8s-event", "Kubernetes event trigger", K8sEventSchema))
+	server.RegisterExecutorWithSchema("k8s-log-monitor", &K8sLogMonitorExecutor{}, makeLogMonitorSchema())
 
 	// Register K8s action nodes
 	server.RegisterExecutorWithSchema("k8s-get", &K8sGetExecutor{}, makeActionSchema("k8s-get", "Get a Kubernetes resource", K8sGetSchema))
@@ -82,6 +83,57 @@ func makeTriggerSchema(name, description string, inputSchema map[string]interfac
 	}
 }
 
+func makeLogMonitorSchema() *resolver.NodeSchema {
+	return &resolver.NodeSchema{
+		Name:        "k8s-log-monitor",
+		DisplayName: "Log Monitor",
+		Category:    "trigger",
+		Description: "Periodically monitor logs and trigger when patterns match",
+		Sections: []*resolver.ConfigSection{
+			{
+				Title: "Target",
+				Fields: []*resolver.FieldSchema{
+					{Key: "cluster", Type: resolver.FieldTypeText, Label: "Cluster", Hint: "Kubernetes cluster name"},
+					{Key: "namespace", Type: resolver.FieldTypeText, Label: "Namespace", Hint: "Namespace to monitor"},
+					{Key: "resourceType", Type: resolver.FieldTypeSelect, Label: "Resource Type", Options: []resolver.SelectOption{
+						{Label: "Pod", Value: "pod"},
+						{Label: "Deployment", Value: "deployment"},
+						{Label: "StatefulSet", Value: "statefulset"},
+						{Label: "DaemonSet", Value: "daemonset"},
+						{Label: "Service", Value: "service"},
+					}},
+					{Key: "resourceName", Type: resolver.FieldTypeText, Label: "Resource Name", Hint: "Name or label selector"},
+					{Key: "container", Type: resolver.FieldTypeText, Label: "Container", Hint: "Container name (optional)"},
+				},
+			},
+			{
+				Title: "Schedule",
+				Fields: []*resolver.FieldSchema{
+					{Key: "interval", Type: resolver.FieldTypeText, Label: "Check Interval", Hint: "How often to check logs (e.g., 1m, 5m, 1h)", Default: "5m"},
+					{Key: "lookback", Type: resolver.FieldTypeText, Label: "Lookback Period", Hint: "How far back to look in logs (e.g., 1m, 5m)", Default: "5m"},
+				},
+			},
+			{
+				Title: "Filters",
+				Fields: []*resolver.FieldSchema{
+					{Key: "includePatterns", Type: resolver.FieldTypeTextarea, Label: "Include Patterns", Hint: "Regex patterns to match (one per line). Leave empty to match all.", Rows: 3, Placeholder: "ERROR\\s.*\nWARN\\s.*\nException"},
+					{Key: "excludePatterns", Type: resolver.FieldTypeTextarea, Label: "Exclude Patterns", Hint: "Regex patterns to ignore (one per line)", Rows: 3, Placeholder: "DEBUG\\s.*\nhealth\\scheck"},
+					{Key: "includeKeywords", Type: resolver.FieldTypeTags, Label: "Include Keywords", Hint: "Simple keywords to match (faster than regex)"},
+					{Key: "excludeKeywords", Type: resolver.FieldTypeTags, Label: "Exclude Keywords", Hint: "Simple keywords to ignore"},
+				},
+			},
+			{
+				Title: "Trigger Conditions",
+				Fields: []*resolver.FieldSchema{
+					{Key: "minMatches", Type: resolver.FieldTypeNumber, Label: "Min Matches", Hint: "Minimum matches to trigger", Default: 1},
+					{Key: "maxMatches", Type: resolver.FieldTypeNumber, Label: "Max Matches", Hint: "Maximum matches to include in output (0 = all)", Default: 100},
+					{Key: "triggerOnMatch", Type: resolver.FieldTypeToggle, Label: "Trigger on First Match", Hint: "Trigger immediately when first match found", Default: true},
+				},
+			},
+		},
+	}
+}
+
 func mustMarshal(v interface{}) []byte {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -116,6 +168,23 @@ func (e *K8sEventExecutor) Execute(ctx context.Context, step *executor.StepDefin
 		Output: map[string]interface{}{
 			"message": "k8s-event trigger fired",
 			"config":  step.Config,
+		},
+	}, nil
+}
+
+// K8sLogMonitorExecutor handles k8s-log-monitor trigger node type
+type K8sLogMonitorExecutor struct{}
+
+func (e *K8sLogMonitorExecutor) Type() string { return "k8s-log-monitor" }
+
+func (e *K8sLogMonitorExecutor) Execute(ctx context.Context, step *executor.StepDefinition, resolver executor.TemplateResolver) (*executor.StepResult, error) {
+	// Log monitor is a trigger - this executes when matching logs are found
+	// The actual log monitoring is handled by Atlas's trigger scheduler
+	return &executor.StepResult{
+		Output: map[string]interface{}{
+			"message": "k8s-log-monitor trigger fired",
+			"config":  step.Config,
+			"matches": []map[string]interface{}{},
 		},
 	}, nil
 }
@@ -363,4 +432,25 @@ var K8sEventSchema = map[string]interface{}{
 		"name":      map[string]interface{}{"type": "string", "description": "Resource name"},
 	},
 	"required": []string{"kind"},
+}
+
+var K8sLogMonitorSchema = map[string]interface{}{
+	"type": "object",
+	"properties": map[string]interface{}{
+		"cluster":         map[string]interface{}{"type": "string", "description": "Kubernetes cluster name"},
+		"namespace":       map[string]interface{}{"type": "string", "description": "Namespace to monitor"},
+		"resourceType":    map[string]interface{}{"type": "string", "enum": []string{"pod", "deployment", "statefulset", "daemonset", "service"}},
+		"resourceName":    map[string]interface{}{"type": "string", "description": "Resource name or label selector"},
+		"container":       map[string]interface{}{"type": "string", "description": "Container name (optional)"},
+		"interval":        map[string]interface{}{"type": "string", "default": "5m", "description": "Check interval"},
+		"lookback":        map[string]interface{}{"type": "string", "default": "5m", "description": "Lookback period"},
+		"includePatterns": map[string]interface{}{"type": "string", "description": "Regex patterns to match (one per line)"},
+		"excludePatterns": map[string]interface{}{"type": "string", "description": "Regex patterns to ignore (one per line)"},
+		"includeKeywords": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+		"excludeKeywords": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+		"minMatches":      map[string]interface{}{"type": "integer", "default": 1},
+		"maxMatches":      map[string]interface{}{"type": "integer", "default": 100},
+		"triggerOnMatch":  map[string]interface{}{"type": "boolean", "default": true},
+	},
+	"required": []string{"namespace", "resourceType", "resourceName"},
 }
