@@ -1,3 +1,5 @@
+github.com/axiom-studio/skills.sdk v0.0.0-20260317202929-5ed82c130745 h1:ZaJkuampKp72QIg78ZW1R3+EDVwNTaLdhQUOdEY+vO8=
+github.com/axiom-studio/skills.sdk v0.0.0-20260317202929-5ed82c130745/go.mod h1:yoq4eBLIrLcdlyZ689rnejVEOliwIRk9eiUlFiRtBVU=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
 github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=

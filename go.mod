@@ -2,7 +2,7 @@ module github.com/axiom-studio/skills/skill-k8s
 
 go 1.25
 
-require github.com/axiom-studio/skills.sdk v0.0.0-20260316215220-46d77e2b33a1
+require github.com/axiom-studio/skills.sdk v0.0.0-20260317202929-5ed82c130745
 
 require (
 	golang.org/x/net v0.32.0 // indirect
@@ -12,5 +12,3 @@ require (
 	google.golang.org/grpc v1.70.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )
-
-replace github.com/axiom-studio/skills.sdk => ../../skills.sdk
